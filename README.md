@@ -56,6 +56,8 @@ The response contains `report_url` (SAS link), `blob_path`, and `run_id` for dow
 - Python 3.12
 - `uv` package manager or `pip`
 - Access to the Azure resources (OpenAI GPT-5 deployment + Blob Storage container)
+- For PDF generation in macOS: `brew install cairo pango gdk-pixbuf libffi`
+  (on Debian/Ubuntu: `apt-get install libcairo2 libpango-1.0-0 libgdk-pixbuf2.0-0 libffi-dev`)
 
 ### Environment Setup
 1. Copy the template:
@@ -93,10 +95,33 @@ The API is now available at `http://localhost:8000`. Swagger docs can be viewed 
 - The test suite covers eligibility rules, consolidation math, API schemas, and ensures the report endpoint responds (with Azure integrations stubbed).
 
 ## Deployment Notes
-A Dockerfile is the next logical step (planned). Current considerations:
-- Rehydrate `uv` dependencies via `uv pip sync` or lock into `requirements.txt` for build reproducibility.
-- Provide the `.env` values as secrets or environment variables in the container orchestrator.
-- Ensure the container is allowed to reach Azure OpenAI and Blob Storage endpoints.
+### Docker build
+```bash
+docker build -t finreport:local .
+docker run --rm -p 8000:8000 finreport:local
+```
+The container installs all WeasyPrint system dependencies; provide runtime secrets through environment variables or an `.env` file mounted at runtime.
+
+### One-command deployment to Azure Container Apps
+A helper script lives at `scripts/deploy_containerapp.sh`. It will:
+- Create (or reuse) the resource group, Azure Container Registry, Log Analytics workspace, and Container Apps environment.
+- Build/push the Docker image to ACR.
+- Create or update the Container App with secrets and environment variables mapped from your shell.
+
+Usage:
+```bash
+export AZURE_GPT5_ENDPOINT=...
+export AZURE_GPT5_API_KEY=...
+export AZURE_MODEL_NAME_DEPLOYMENT=...
+export AZURE_OPENAI_API_VERSION=...
+export AZURE_STORAGE_ACCOUNT_URL=...
+export AZURE_STORAGE_ACCOUNT_KEY=...
+export AZURE_STORAGE_CONTAINER=...
+export API_KEY=...
+
+./scripts/deploy_containerapp.sh
+```
+Override the default resource names by exporting `RG`, `ACR`, `IMG`, `TAG`, etc. before running the script. When it completes, it prints the public URL plus example curl commands for the health check and report endpoint.
 
 ## Roadmap Ideas
 - Add a vector store for historical customer interactions to enrich advisor reports.

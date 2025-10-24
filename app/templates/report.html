@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root {
+      --bg-light: #f5f7fb;
+      --bg-card: #ffffff;
+      --accent: #1f5fff;
+      --accent-soft: #e6ecff;
+      --text-primary: #1f2430;
+      --text-secondary: #4a5160;
+      --text-muted: #7a8399;
+      --border: #d8deed;
+    }
+    * {
+      box-sizing: border-box;
+      font-family: "Helvetica", "Arial", sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 32px 48px;
+      background: var(--bg-light);
+      color: var(--text-primary);
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 32px;
+    }
+    .title {
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    .meta {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+    }
+    .tag {
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    section {
+      margin-bottom: 28px;
+    }
+    h2 {
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin: 0 0 12px;
+      color: var(--text-secondary);
+    }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 22px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 14px rgba(31, 36, 48, 0.05);
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text-secondary);
+    }
+    .card-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .metric-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+    }
+    .metric-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .notes ul {
+      padding-left: 18px;
+      margin: 6px 0 0;
+    }
+    .notes li {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+    .pill {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 10px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-left: 6px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+    }
+    .list {
+      list-style: none;
+      padding-left: 0;
+      margin: 0;
+    }
+    .list li {
+      position: relative;
+      padding-left: 18px;
+      margin-bottom: 6px;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+    .list li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+    }
+    footer {
+      margin-top: 32px;
+      font-size: 10px;
+      color: var(--text-muted);
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="title">Informe de reestructuración financiera</div>
+      <div class="meta">Cliente · {{ customer_id }}</div>
+      <div class="meta">Saldo consolidado · {{ consolidated_balance }}</div>
+    </div>
+    <div class="tag">Generado {{ generated_at }}</div>
+  </header>
+
+  <section class="card">
+    <h2>Resumen ejecutivo</h2>
+    <ul class="list">
+      {% for sentence in narrative.summary %}
+        <li>{{ sentence }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Puntos clave por escenario</h2>
+    <ul class="list">
+      {% for bullet in narrative.scenarios %}
+        <li>{{ bullet }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section>
+    <h2>Detalle de escenarios</h2>
+    <div class="grid">
+      {% for scenario in scenarios %}
+        <div class="card">
+          <div class="card-title">
+            {{ scenario.title }}
+            {% if scenario.offer_id %}
+              <span class="pill">{{ scenario.offer_id }}</span>
+            {% endif %}
+          </div>
+          <div class="card-meta">
+            <div>
+              <div class="metric-label">Pago mensual</div>
+              <div class="metric-value">{{ scenario.monthly_payment }}</div>
+            </div>
+            <div>
+              <div class="metric-label">Meses estimados</div>
+              <div class="metric-value">{{ scenario.payoff_months }}</div>
+            </div>
+            <div>
+              <div class="metric-label">Total pagado</div>
+              <div class="metric-value">{{ scenario.total_paid }}</div>
+            </div>
+            <div>
+              <div class="metric-label">Interés estimado</div>
+              <div class="metric-value">{{ scenario.interest_cost }}</div>
+            </div>
+            {% if scenario.savings_vs_minimum %}
+            <div>
+              <div class="metric-label">Ahorro vs mínimo</div>
+              <div class="metric-value">{{ scenario.savings_vs_minimum }}</div>
+            </div>
+            {% endif %}
+          </div>
+          {% if scenario.notes %}
+          <div class="notes">
+            <ul>
+              {% for note in scenario.notes %}
+                <li>{{ note }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Recomendaciones y riesgos</h2>
+    <ul class="list">
+      {% for sentence in narrative.risks %}
+        <li>{{ sentence }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <footer>
+    Elaborado automáticamente por Fin Restructure Assistant · {{ run_id }}
+  </footer>
+</body>
+</html>

@@ -48,9 +48,10 @@ class AzureBlobReportStorage(StorageUploader):
         )
         self._account_name = self._service_client.account_name
 
-    def upload(self, *, customer_id: str, data: bytes) -> UploadResult:
+    def upload(self, *, customer_id: str, data: bytes, run_id: str | None = None) -> UploadResult:
         now = datetime.utcnow()
-        run_id = f"rpt_{uuid4().hex[:8]}"
+        if run_id is None:
+            run_id = f"rpt_{uuid4().hex[:8]}"
         blob_path = self._build_blob_path(now=now, customer_id=customer_id, run_id=run_id)
 
         blob_client = self._service_client.get_blob_client(

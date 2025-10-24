@@ -326,7 +326,7 @@ class ScenarioBuilder:
 
     @staticmethod
     def _format_currency(value: Decimal) -> str:
-        return f"${value:,.2f}"
+        return f"S/. {value:,.2f}"
 
     @staticmethod
     def _simulate_single_loan(

@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Iterable
+from uuid import uuid4
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.ai.openai_client import AzureOpenAIClient
 from app.models import (
@@ -22,12 +26,27 @@ class ReportGenerator:
         self._scenario_builder = scenario_builder
         self._openai_client = AzureOpenAIClient()
         self._storage = AzureBlobReportStorage()
+        templates_path = Path(__file__).resolve().parent.parent / "templates"
+        self._jinja = Environment(
+            loader=FileSystemLoader(templates_path),
+            autoescape=select_autoescape(["html"]),
+        )
+        self._template = self._jinja.get_template("report.html")
 
     async def generate(self, customer_id: str) -> ReportResult:
         profile, summary = self._scenario_builder.build_summary(customer_id)
         narrative = await self._build_narrative(profile, summary)
-        pdf_bytes = self._render_pdf(profile, summary, narrative)
-        upload = self._storage.upload(customer_id=customer_id, data=pdf_bytes)
+        parsed_narrative = self._parse_narrative(narrative)
+        run_id = f"rpt_{uuid4().hex[:8]}"
+        rendered_at = datetime.utcnow()
+        pdf_bytes = self._render_pdf(
+            profile,
+            summary,
+            parsed_narrative,
+            run_id=run_id,
+            generated_at=rendered_at,
+        )
+        upload = self._storage.upload(customer_id=customer_id, data=pdf_bytes, run_id=run_id)
         return ReportResult(
             customer_id=customer_id,
             run_id=upload.run_id,
@@ -98,102 +117,47 @@ class ReportGenerator:
         self,
         profile: CustomerProfile,
         summary: ScenarioSummary,
-        narrative: str,
+        narrative_sections: dict[str, list[str]],
+        *,
+        run_id: str,
+        generated_at: datetime,
     ) -> bytes:
-        from fpdf import FPDF
+        context = {
+            "customer_id": profile.customer_id,
+            "consolidated_balance": self._format_currency(profile.consolidated_balance),
+            "generated_at": generated_at.strftime("%d/%m/%Y"),
+            "run_id": run_id,
+            "narrative": narrative_sections,
+            "scenarios": [
+                {
+                    "title": self._scenario_title(scenario),
+                    "offer_id": scenario.consolidation_offer_id,
+                    "monthly_payment": self._format_currency(scenario.monthly_payment),
+                    "payoff_months": scenario.payoff_months if scenario.payoff_months is not None else "No definido",
+                    "total_paid": self._format_currency(scenario.total_paid),
+                    "interest_cost": self._format_currency(scenario.interest_cost),
+                    "savings_vs_minimum": self._format_currency(scenario.savings_vs_minimum)
+                    if scenario.savings_vs_minimum is not None
+                    else None,
+                    "notes": [self._sanitize(note) for note in scenario.notes],
+                }
+                for scenario in summary.scenarios
+            ],
+        }
+        html = self._template.render(**context)
+        try:
+            from weasyprint import HTML  # delayed import to keep optional dependency lazy
+        except ImportError as exc:  # pragma: no cover - runtime guard
+            raise RuntimeError(
+                "WeasyPrint no está instalado. Ejecuta 'uv add weasyprint' o 'pip install weasyprint' para habilitar la generación de PDF."  # noqa: EM101
+            ) from exc
 
-        pdf = FPDF("P", "mm", "A4")
-        pdf.set_auto_page_break(auto=True, margin=18)
-        pdf.add_page()
-
-        pdf.set_text_color(32, 32, 32)
-        pdf.set_font("Helvetica", "B", 18)
-        pdf.cell(0, 10, "Reporte de Consolidación de Deuda", ln=True)
-
-        pdf.set_font("Helvetica", size=11)
-        pdf.set_text_color(80, 80, 80)
-        pdf.cell(0, 7, self._sanitize(f"Cliente: {profile.customer_id}"), ln=True)
-        pdf.cell(0, 7, self._sanitize(f"Saldo consolidado: {self._format_currency(profile.consolidated_balance)}"), ln=True)
-        pdf.cell(0, 7, self._sanitize(f"Fecha de generación: {datetime.now():%d/%m/%Y}"), ln=True)
-        pdf.ln(4)
-
-        pdf.set_draw_color(200, 200, 200)
-        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-        pdf.ln(6)
-
-        self._render_narrative_section(pdf, narrative)
-        self._render_scenarios_section(pdf, summary.scenarios)
-
-        return pdf.output(dest="S").encode("latin-1", "ignore")
-
-    def _render_narrative_section(self, pdf: "FPDF", narrative: str) -> None:
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.set_text_color(40, 40, 40)
-        pdf.cell(0, 8, "Resumen narrativo", ln=True)
-        pdf.set_font("Helvetica", size=11)
-        pdf.set_text_color(50, 50, 50)
-        for block in filter(None, (p.strip() for p in narrative.split("\n\n"))):
-            lines = block.splitlines() or [block]
-            for raw_line in lines:
-                line = raw_line.strip()
-                if not line:
-                    continue
-                sanitized = self._sanitize(line.lstrip("- "))
-                if raw_line.strip().startswith("-"):
-                    pdf.multi_cell(0, 6, f"- {sanitized}")
-                else:
-                    pdf.multi_cell(0, 6, sanitized)
-            pdf.ln(1)
-        pdf.ln(2)
-
-    def _render_scenarios_section(
-        self,
-        pdf: "FPDF",
-        scenarios: Iterable[ScenarioResult],
-    ) -> None:
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.set_text_color(40, 40, 40)
-        pdf.cell(0, 8, "Detalle de escenarios", ln=True)
-        pdf.ln(1)
-
-        for scenario in scenarios:
-            title = self._scenario_title(scenario)
-            if scenario.scenario_type is ScenarioType.CONSOLIDATION:
-                pdf.set_fill_color(230, 238, 253)
-            elif scenario.scenario_type is ScenarioType.CONSOLIDATION_SURPLUS:
-                pdf.set_fill_color(216, 247, 233)
-            else:
-                pdf.set_fill_color(240, 240, 240)
-            pdf.set_font("Helvetica", "B", 12)
-            pdf.set_text_color(30, 30, 30)
-            pdf.cell(0, 8, self._sanitize(title), ln=True, fill=True)
-
-            pdf.set_font("Helvetica", size=10)
-            pdf.set_text_color(60, 60, 60)
-            pdf.cell(0, 6, self._sanitize(f"Pago mensual: {self._format_currency(scenario.monthly_payment)}"), ln=True)
-            payoff = scenario.payoff_months if scenario.payoff_months is not None else "No definido"
-            pdf.cell(0, 6, self._sanitize(f"Meses estimados: {payoff}"), ln=True)
-            pdf.cell(0, 6, self._sanitize(f"Total pagado: {self._format_currency(scenario.total_paid)}"), ln=True)
-            pdf.cell(0, 6, self._sanitize(f"Interés estimado: {self._format_currency(scenario.interest_cost)}"), ln=True)
-            if scenario.savings_vs_minimum is not None:
-                pdf.cell(0, 6, self._sanitize(f"Ahorro vs mínimo: {self._format_currency(scenario.savings_vs_minimum)}"), ln=True)
-            if scenario.consolidation_offer_id:
-                pdf.cell(0, 6, self._sanitize(f"Oferta aplicable: {scenario.consolidation_offer_id}"), ln=True)
-
-            if scenario.notes:
-                pdf.set_font("Helvetica", "I", 10)
-                pdf.set_text_color(90, 90, 90)
-                for note in scenario.notes:
-                    pdf.multi_cell(0, 5, self._sanitize(f"· {note}"))
-                pdf.set_font("Helvetica", size=10)
-                pdf.set_text_color(60, 60, 60)
-            pdf.ln(2)
-
-    @staticmethod
-    def _format_currency(value: Decimal | str) -> str:
-        if isinstance(value, str):
-            value = Decimal(value)
-        return f"${value:,.2f}"
+        try:
+            return HTML(string=html).write_pdf()
+        except OSError as exc:  # pragma: no cover - depends on system libs
+            raise RuntimeError(
+                "WeasyPrint requiere librerías nativas (cairo, pango, gdk-pixbuf). En macOS instala con 'brew install cairo pango gdk-pixbuf libffi'."  # noqa: EM101
+            ) from exc
 
     @staticmethod
     def _scenario_title(scenario: ScenarioResult) -> str:
@@ -226,4 +190,46 @@ class ReportGenerator:
         }
         for src, dst in replacements.items():
             text = text.replace(src, dst)
-        return text.encode("latin-1", "replace").decode("latin-1")
+        return text
+
+    @staticmethod
+    def _format_currency(value: Decimal | str) -> str:
+        if isinstance(value, str):
+            value = Decimal(value)
+        return f"S/. {value:,.2f}"
+
+    def _parse_narrative(self, narrative: str) -> dict[str, list[str]]:
+        summary: list[str] = []
+        scenarios: list[str] = []
+        risks: list[str] = []
+
+        current = None
+        for raw_line in narrative.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            lower = line.lower()
+            if lower.startswith("resumen ejecutivo"):
+                current = summary
+                continue
+            if lower.startswith("puntos clave"):
+                current = scenarios
+                continue
+            if lower.startswith("recomendaciones") or lower.startswith("riesgos"):
+                current = risks
+                continue
+            if line.startswith("-"):
+                text = self._sanitize(line.lstrip("- "))
+                (current or summary).append(text)
+            else:
+                (current or summary).append(self._sanitize(line))
+
+        # Fallbacks to guarantee sections for template
+        if not summary:
+            summary.append("Se generó el reporte con los datos proporcionados.")
+        if not scenarios:
+            scenarios.append("Ver detalle numérico en la sección inferior.")
+        if not risks:
+            risks.append("Revise los supuestos de ingreso y variabilidad antes de avanzar.")
+
+        return {"summary": summary, "scenarios": scenarios, "risks": risks}
