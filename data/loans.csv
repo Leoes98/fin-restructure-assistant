@@ -1,0 +1,3 @@
+loan_id,customer_id,product_type,principal,annual_rate_pct,remaining_term_months,collateral,days_past_due
+L-101,CU-001,personal,18000.00,28.5,36,false,0
+L-102,CU-002,micro,5000.00,35.0,24,false,15
