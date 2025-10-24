@@ -1,3 +1,4 @@
 card_id,customer_id,balance,annual_rate_pct,min_payment_pct,payment_due_day,days_past_due
 C-201,CU-001,3500.00,45.0,5.0,15,0
 C-202,CU-002,1200.00,39.9,4.0,10,5
+C-203,CU-003,4200.00,42.5,4.5,18,2

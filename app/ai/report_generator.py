@@ -4,7 +4,6 @@ import json
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Iterable
 from uuid import uuid4
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape

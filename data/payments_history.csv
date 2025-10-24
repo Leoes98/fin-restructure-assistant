@@ -1,3 +1,5 @@
 product_id,product_type,customer_id,date,amount
 L-101,loan,CU-001,2025-10-01,600.00
 C-201,card,CU-001,2025-10-05,200.00
+L-103,loan,CU-003,2025-10-03,450.00
+C-203,card,CU-003,2025-10-08,220.00

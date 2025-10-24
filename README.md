@@ -51,6 +51,9 @@ curl -X POST http://localhost:8000/v1/report \
 ```
 The response contains `report_url` (SAS link), `blob_path`, and `run_id` for downstream references.
 
+### Sample Reports
+For reviewers, curated PDFs for `CU-001`, `CU-002`, and `CU-003` live under `outputs/sample-reports/`. These were generated with the current pipeline and illustrate the layout, tone, and financial metrics surfaced to clients.
+
 ## Getting Started
 ### Prerequisites
 - Python 3.12
